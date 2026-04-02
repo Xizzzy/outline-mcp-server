@@ -34,7 +34,9 @@ toolRegistry.register('list_collections', {
           },
           {
             type: 'text',
-            text: `pagination: ${JSON.stringify(response.data.pagination)}`,
+            text: `pagination: ${JSON.stringify(allowed
+              ? { ...response.data.pagination, total: collections.length }
+              : response.data.pagination)}`,
           },
         ],
       };
