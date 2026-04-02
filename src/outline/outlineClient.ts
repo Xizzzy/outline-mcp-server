@@ -82,6 +82,46 @@ export function getAllowedCollectionIds(): string[] | undefined {
 }
 
 /**
+ * Returns true if the given collection ID is in the allowed list.
+ * When OUTLINE_COLLECTION_ID is not set, all collections are allowed.
+ */
+export function isCollectionAllowed(collectionId: string): boolean {
+  const allowed = getAllowedCollectionIds();
+  if (!allowed) return true;
+  return allowed.includes(collectionId);
+}
+
+/**
+ * Throws if the given collection ID is not in the allowed list.
+ */
+export function assertCollectionAllowed(collectionId: string): void {
+  if (!isCollectionAllowed(collectionId)) {
+    throw new Error(
+      `Access denied: collection ${collectionId} is not in OUTLINE_COLLECTION_ID`
+    );
+  }
+}
+
+/**
+ * Fetches a document and throws if it belongs to a collection outside the allowed list.
+ * Returns the document data for reuse.
+ */
+export async function assertDocumentAllowed(documentId: string): Promise<any> {
+  const allowed = getAllowedCollectionIds();
+  if (!allowed) return;
+
+  const client = getOutlineClient();
+  const response = await client.post('/documents.info', { id: documentId });
+  const doc = response.data.data;
+  if (!allowed.includes(doc.collectionId)) {
+    throw new Error(
+      `Access denied: document belongs to collection ${doc.collectionId} which is not in OUTLINE_COLLECTION_ID`
+    );
+  }
+  return doc;
+}
+
+/**
  * Default client instance for backward compatibility
  * Note: This will only validate API key when first accessed, not on import
  */

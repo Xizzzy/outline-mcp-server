@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient } from '../outline/outlineClient.js';
+import { getOutlineClient, assertDocumentAllowed } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import { z } from 'zod';
 
@@ -12,6 +12,7 @@ toolRegistry.register('archive-document', {
   },
   async callback(args) {
     try {
+      await assertDocumentAllowed(args.id);
       const client = getOutlineClient();
       const response = await client.post('/documents.archive', {
         id: args.id,

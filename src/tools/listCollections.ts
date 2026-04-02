@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient } from '../outline/outlineClient.js';
+import { getOutlineClient, getAllowedCollectionIds } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -20,11 +20,17 @@ toolRegistry.register('list_collections', {
 
       const client = getOutlineClient();
       const response = await client.post('/collections.list', payload);
+
+      const allowed = getAllowedCollectionIds();
+      const collections = allowed
+        ? response.data.data.filter((c: any) => allowed.includes(c.id))
+        : response.data.data;
+
       return {
         content: [
           {
             type: 'text',
-            text: `collections: ${JSON.stringify(response.data.data)}`,
+            text: `collections: ${JSON.stringify(collections)}`,
           },
           {
             type: 'text',

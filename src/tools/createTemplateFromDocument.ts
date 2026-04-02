@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient } from '../outline/outlineClient.js';
+import { getOutlineClient, assertDocumentAllowed } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -13,6 +13,7 @@ toolRegistry.register('create_template_from_document', {
   },
   async callback(args) {
     try {
+      await assertDocumentAllowed(args.id);
       const payload = {
         id: args.id,
       };

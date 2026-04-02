@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient } from '../outline/outlineClient.js';
+import { getOutlineClient, getAllowedCollectionIds } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -19,6 +19,9 @@ toolRegistry.register('create_collection', {
   },
   async callback(args) {
     try {
+      if (getAllowedCollectionIds()) {
+        throw new Error('Access denied: cannot create collections when OUTLINE_COLLECTION_ID is set');
+      }
       const payload: Record<string, any> = {
         name: args.name,
       };
