@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient } from '../outline/outlineClient.js';
+import { getOutlineClient, getDefaultCollectionId } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -42,9 +42,9 @@ toolRegistry.register('list_documents', {
         payload.template = args.template;
       }
 
-      // Only add collectionId if it's provided
-      if (args.collectionId) {
-        payload.collectionId = args.collectionId;
+      const collectionId = args.collectionId || getDefaultCollectionId();
+      if (collectionId) {
+        payload.collectionId = collectionId;
       }
 
       // Only add userId if it's provided

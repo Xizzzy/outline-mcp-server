@@ -52,6 +52,14 @@ export function getDefaultOutlineClient(): AxiosInstance {
 }
 
 /**
+ * Gets the default collection ID from environment variable.
+ * When set, tools will automatically scope operations to this collection.
+ */
+export function getDefaultCollectionId(): string | undefined {
+  return process.env.OUTLINE_COLLECTION_ID;
+}
+
+/**
  * Default client instance for backward compatibility
  * Note: This will only validate API key when first accessed, not on import
  */

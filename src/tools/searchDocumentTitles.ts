@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient } from '../outline/outlineClient.js';
+import { getOutlineClient, getDefaultCollectionId } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -20,8 +20,9 @@ toolRegistry.register('search_document_titles', {
         query: args.query,
       };
 
-      if (args.collectionId) {
-        payload.collectionId = args.collectionId;
+      const collectionId = args.collectionId || getDefaultCollectionId();
+      if (collectionId) {
+        payload.collectionId = collectionId;
       }
       if (args.limit !== undefined) {
         payload.limit = args.limit;
