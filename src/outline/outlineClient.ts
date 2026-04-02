@@ -52,11 +52,33 @@ export function getDefaultOutlineClient(): AxiosInstance {
 }
 
 /**
- * Gets the default collection ID from environment variable.
- * When set, tools will automatically scope operations to this collection.
+ * Parses OUTLINE_COLLECTION_ID env var.
+ * Supports a single ID or comma-separated list of IDs.
+ * Returns undefined when not set (no filtering).
+ */
+function parseCollectionIds(): string[] | undefined {
+  const raw = process.env.OUTLINE_COLLECTION_ID;
+  if (!raw) return undefined;
+  const ids = raw.split(',').map(s => s.trim()).filter(Boolean);
+  return ids.length > 0 ? ids : undefined;
+}
+
+/**
+ * Gets the default collection ID for tools that accept a single collectionId.
+ * When multiple IDs are configured, returns the first one.
+ * When not set, returns undefined (no filtering).
  */
 export function getDefaultCollectionId(): string | undefined {
-  return process.env.OUTLINE_COLLECTION_ID;
+  const ids = parseCollectionIds();
+  return ids?.[0];
+}
+
+/**
+ * Gets all allowed collection IDs from OUTLINE_COLLECTION_ID env var.
+ * Returns undefined when not set (all collections allowed).
+ */
+export function getAllowedCollectionIds(): string[] | undefined {
+  return parseCollectionIds();
 }
 
 /**

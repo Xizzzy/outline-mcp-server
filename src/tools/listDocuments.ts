@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient, getDefaultCollectionId } from '../outline/outlineClient.js';
+import { getOutlineClient, getDefaultCollectionId, getAllowedCollectionIds } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -29,57 +29,69 @@ toolRegistry.register('list_documents', {
   },
   async callback(args) {
     try {
-      // Create the payload object
-      const payload: Record<string, any> = {
+      const basePayload: Record<string, any> = {
         offset: args.offset ?? 0,
         limit: args.limit || 25,
         sort: args.sort || 'updatedAt',
         direction: args.direction || 'DESC',
       };
 
-      // Only add template if it's explicitly defined
       if (args.template !== undefined) {
-        payload.template = args.template;
+        basePayload.template = args.template;
       }
-
-      const collectionId = args.collectionId || getDefaultCollectionId();
-      if (collectionId) {
-        payload.collectionId = collectionId;
-      }
-
-      // Only add userId if it's provided
       if (args.userId) {
-        payload.userId = args.userId;
+        basePayload.userId = args.userId;
       }
-
-      // Only add backlinkDocumentId if it's provided
       if (args.backlinkDocumentId) {
-        payload.backlinkDocumentId = args.backlinkDocumentId;
+        basePayload.backlinkDocumentId = args.backlinkDocumentId;
       }
-
-      // Only add parentDocumentId if it's provided
       if (args.parentDocumentId) {
-        payload.parentDocumentId = args.parentDocumentId;
+        basePayload.parentDocumentId = args.parentDocumentId;
       }
 
-      // Make the POST request to the documents.list endpoint
       const client = getOutlineClient();
-      const response = await client.post('/documents.list', payload);
 
-      // Transform the response to a more usable format
-      const documents = response.data.data;
+      // Determine which collections to query
+      const collectionIds = args.collectionId
+        ? [args.collectionId]
+        : getAllowedCollectionIds();
 
-      // Return the documents with additional metadata
+      if (!collectionIds || collectionIds.length <= 1) {
+        // Single collection or no filter — one request
+        const payload = { ...basePayload };
+        const id = collectionIds?.[0] || getDefaultCollectionId();
+        if (id) payload.collectionId = id;
+
+        const response = await client.post('/documents.list', payload);
+        return {
+          content: [
+            { type: 'text', text: `documents: ${JSON.stringify(response.data.data)}` },
+            { type: 'text', text: `pagination: ${JSON.stringify(response.data.pagination)}` },
+          ],
+        };
+      }
+
+      // Multiple collections — parallel requests, merge results
+      const responses = await Promise.all(
+        collectionIds.map(id =>
+          client.post('/documents.list', { ...basePayload, collectionId: id })
+        )
+      );
+
+      const allDocs = responses.flatMap(r => r.data.data);
+      const sortField = basePayload.sort;
+      const dir = basePayload.direction === 'ASC' ? 1 : -1;
+      allDocs.sort((a: any, b: any) => {
+        const va = a[sortField] ?? '';
+        const vb = b[sortField] ?? '';
+        return va < vb ? -dir : va > vb ? dir : 0;
+      });
+
+      const limited = allDocs.slice(0, basePayload.limit);
       return {
         content: [
-          {
-            type: 'text',
-            text: `documents: ${JSON.stringify(documents)}`,
-          },
-          {
-            type: 'text',
-            text: `pagination: ${JSON.stringify(response.data.pagination)}`,
-          },
+          { type: 'text', text: `documents: ${JSON.stringify(limited)}` },
+          { type: 'text', text: `pagination: ${JSON.stringify({ limit: basePayload.limit, offset: basePayload.offset, total: allDocs.length })}` },
         ],
       };
     } catch (error: any) {
