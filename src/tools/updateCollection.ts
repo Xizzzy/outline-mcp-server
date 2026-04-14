@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient, assertCollectionAllowed } from '../outline/outlineClient.js';
+import { getOutlineClient, assertCollectionAllowed, resolveCollectionRef } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -19,9 +19,10 @@ toolRegistry.register('update_collection', {
   },
   async callback(args) {
     try {
-      assertCollectionAllowed(args.id);
+      const id = await resolveCollectionRef(args.id);
+      await assertCollectionAllowed(id);
       const payload: Record<string, any> = {
-        id: args.id,
+        id,
       };
 
       if (args.name) {

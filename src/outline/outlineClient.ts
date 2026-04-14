@@ -51,10 +51,27 @@ export function getDefaultOutlineClient(): AxiosInstance {
   return createOutlineClient();
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+/**
+ * Extracts the urlId segment from a collection reference.
+ * Accepts either a bare urlId ("VvwEgtUPz1") or a full slug ("meowl-VvwEgtUPz1")
+ * as seen in URLs like /collection/<slug>/...
+ */
+function extractUrlId(ref: string): string {
+  const idx = ref.lastIndexOf('-');
+  return idx >= 0 ? ref.slice(idx + 1) : ref;
+}
+
 /**
  * Parses OUTLINE_COLLECTION_ID env var.
- * Supports a single ID or comma-separated list of IDs.
- * Returns undefined when not set (no filtering).
+ * Supports a single value or comma-separated list.
+ * Entries can be UUIDs, urlIds, or full slugs (title-urlId).
+ * Returns undefined when not set.
  */
 function parseCollectionIds(): string[] | undefined {
   const raw = process.env.OUTLINE_COLLECTION_ID;
@@ -63,41 +80,127 @@ function parseCollectionIds(): string[] | undefined {
   return ids.length > 0 ? ids : undefined;
 }
 
+let collectionMapCache: Map<string, string> | undefined;
+let collectionMapPromise: Promise<Map<string, string>> | undefined;
+
 /**
- * Gets the default collection ID for tools that accept a single collectionId.
- * When multiple IDs are configured, returns the first one.
- * When not set, returns undefined (no filtering).
+ * Lazily fetches and caches a urlId → UUID map for all collections.
+ * One paginated /collections.list call on first access; reused afterwards.
  */
-export function getDefaultCollectionId(): string | undefined {
-  const ids = parseCollectionIds();
+async function getCollectionUrlIdMap(): Promise<Map<string, string>> {
+  if (collectionMapCache) return collectionMapCache;
+  if (collectionMapPromise) return collectionMapPromise;
+
+  collectionMapPromise = (async () => {
+    const client = getOutlineClient();
+    const map = new Map<string, string>();
+    const limit = 100;
+    let offset = 0;
+    while (true) {
+      const response = await client.post('/collections.list', { limit, offset });
+      const collections = (response.data.data ?? []) as Array<{ id: string; urlId: string }>;
+      for (const c of collections) {
+        if (c.urlId) map.set(c.urlId, c.id);
+      }
+      if (collections.length < limit) break;
+      offset += limit;
+    }
+    collectionMapCache = map;
+    return map;
+  })();
+
+  try {
+    return await collectionMapPromise;
+  } finally {
+    collectionMapPromise = undefined;
+  }
+}
+
+/**
+ * Resolves a collection reference (UUID, urlId, or slug) to a canonical UUID.
+ * UUIDs are returned as-is. Slugs/urlIds are resolved via /collections.list.
+ */
+export async function resolveCollectionRef(ref: string): Promise<string> {
+  if (isUuid(ref)) return ref;
+  const urlId = extractUrlId(ref);
+  const map = await getCollectionUrlIdMap();
+  const uuid = map.get(urlId);
+  if (!uuid) {
+    throw new Error(
+      `Collection "${ref}" not found (urlId="${urlId}" not present in /collections.list)`
+    );
+  }
+  return uuid;
+}
+
+let allowedIdsCache: { ids: string[] | undefined } | undefined;
+let allowedIdsPromise: Promise<string[] | undefined> | undefined;
+
+/**
+ * Gets all allowed collection UUIDs from OUTLINE_COLLECTION_ID.
+ * Slugs/urlIds are resolved to UUIDs on first call and cached.
+ * Returns undefined when the env var is not set (all collections allowed).
+ */
+export async function getAllowedCollectionIds(): Promise<string[] | undefined> {
+  if (allowedIdsCache) return allowedIdsCache.ids;
+  if (allowedIdsPromise) return allowedIdsPromise;
+
+  allowedIdsPromise = (async () => {
+    const raw = parseCollectionIds();
+    if (!raw) {
+      allowedIdsCache = { ids: undefined };
+      return undefined;
+    }
+    const resolved: string[] = [];
+    for (const item of raw) {
+      resolved.push(await resolveCollectionRef(item));
+    }
+    allowedIdsCache = { ids: resolved };
+    return resolved;
+  })();
+
+  try {
+    return await allowedIdsPromise;
+  } finally {
+    allowedIdsPromise = undefined;
+  }
+}
+
+/**
+ * Gets the default collection UUID for tools that accept a single collectionId.
+ * When multiple values are configured, returns the first one (resolved to UUID).
+ */
+export async function getDefaultCollectionId(): Promise<string | undefined> {
+  const ids = await getAllowedCollectionIds();
   return ids?.[0];
 }
 
 /**
- * Gets all allowed collection IDs from OUTLINE_COLLECTION_ID env var.
- * Returns undefined when not set (all collections allowed).
+ * Synchronous check: is OUTLINE_COLLECTION_ID set at all?
+ * Useful for guards that only need the presence signal, not resolved values.
  */
-export function getAllowedCollectionIds(): string[] | undefined {
-  return parseCollectionIds();
+export function hasCollectionFilter(): boolean {
+  return parseCollectionIds() !== undefined;
 }
 
 /**
- * Returns true if the given collection ID is in the allowed list.
- * When OUTLINE_COLLECTION_ID is not set, all collections are allowed.
+ * Returns true if the given collection reference (UUID, urlId, or slug)
+ * resolves to an allowed UUID.
  */
-export function isCollectionAllowed(collectionId: string): boolean {
-  const allowed = getAllowedCollectionIds();
+export async function isCollectionAllowed(ref: string): Promise<boolean> {
+  const allowed = await getAllowedCollectionIds();
   if (!allowed) return true;
-  return allowed.includes(collectionId);
+  const uuid = await resolveCollectionRef(ref);
+  return allowed.includes(uuid);
 }
 
 /**
- * Throws if the given collection ID is not in the allowed list.
+ * Throws if the given collection reference is not in the allowed list.
  */
-export function assertCollectionAllowed(collectionId: string): void {
-  if (!isCollectionAllowed(collectionId)) {
+export async function assertCollectionAllowed(ref: string): Promise<void> {
+  if (!(await isCollectionAllowed(ref))) {
     throw new Error(
-      `Access denied: collection ${collectionId} is not in OUTLINE_COLLECTION_ID`
+      `Access denied: collection ${ref} is not in OUTLINE_COLLECTION_ID`
     );
   }
 }
@@ -107,7 +210,7 @@ export function assertCollectionAllowed(collectionId: string): void {
  * Returns the document data for reuse.
  */
 export async function assertDocumentAllowed(documentId: string): Promise<any> {
-  const allowed = getAllowedCollectionIds();
+  const allowed = await getAllowedCollectionIds();
   if (!allowed) return;
 
   const client = getOutlineClient();

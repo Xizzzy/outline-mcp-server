@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient, getDefaultCollectionId, getAllowedCollectionIds } from '../outline/outlineClient.js';
+import { getOutlineClient, getDefaultCollectionId, getAllowedCollectionIds, resolveCollectionRef } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -53,13 +53,13 @@ toolRegistry.register('list_documents', {
 
       // Determine which collections to query
       const collectionIds = args.collectionId
-        ? [args.collectionId]
-        : getAllowedCollectionIds();
+        ? [await resolveCollectionRef(args.collectionId)]
+        : await getAllowedCollectionIds();
 
       if (!collectionIds || collectionIds.length <= 1) {
         // Single collection or no filter — one request
         const payload = { ...basePayload };
-        const id = collectionIds?.[0] || getDefaultCollectionId();
+        const id = collectionIds?.[0] || await getDefaultCollectionId();
         if (id) payload.collectionId = id;
 
         const response = await client.post('/documents.list', payload);

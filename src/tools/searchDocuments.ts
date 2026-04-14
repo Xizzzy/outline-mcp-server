@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient, getDefaultCollectionId, getAllowedCollectionIds } from '../outline/outlineClient.js';
+import { getOutlineClient, getDefaultCollectionId, getAllowedCollectionIds, resolveCollectionRef } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -55,8 +55,8 @@ toolRegistry.register('search_documents', {
       const client = getOutlineClient();
 
       const collectionIds = args.collectionId
-        ? [args.collectionId]
-        : getAllowedCollectionIds();
+        ? [await resolveCollectionRef(args.collectionId)]
+        : await getAllowedCollectionIds();
 
       const mapResults = (data: any[]) =>
         data.map((item: any) => {
@@ -70,7 +70,7 @@ toolRegistry.register('search_documents', {
 
       if (!collectionIds || collectionIds.length <= 1) {
         const payload = { ...basePayload };
-        const id = collectionIds?.[0] || getDefaultCollectionId();
+        const id = collectionIds?.[0] || await getDefaultCollectionId();
         if (id) payload.collectionId = id;
 
         const response = await client.post('/documents.search', payload);

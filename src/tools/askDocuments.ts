@@ -1,5 +1,5 @@
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { getOutlineClient, getDefaultCollectionId } from '../outline/outlineClient.js';
+import { getOutlineClient, getDefaultCollectionId, resolveCollectionRef } from '../outline/outlineClient.js';
 import toolRegistry from '../utils/toolRegistry.js';
 import z from 'zod';
 
@@ -39,7 +39,9 @@ toolRegistry.register('ask_documents', {
         payload.userId = args.userId;
       }
 
-      const collectionId = args.collectionId || getDefaultCollectionId();
+      const collectionId = args.collectionId
+        ? await resolveCollectionRef(args.collectionId)
+        : await getDefaultCollectionId();
       if (collectionId) {
         payload.collectionId = collectionId;
       }

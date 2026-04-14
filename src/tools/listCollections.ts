@@ -21,7 +21,7 @@ toolRegistry.register('list_collections', {
       const client = getOutlineClient();
       const response = await client.post('/collections.list', payload);
 
-      const allowed = getAllowedCollectionIds();
+      const allowed = await getAllowedCollectionIds();
       const collections = allowed
         ? response.data.data.filter((c: any) => allowed.includes(c.id))
         : response.data.data;
